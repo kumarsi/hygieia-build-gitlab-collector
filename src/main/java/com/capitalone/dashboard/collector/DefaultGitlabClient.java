@@ -432,7 +432,6 @@ public class DefaultGitlabClient implements GitlabClient {
 
         if (commitsResponse.getHeaders() != null && !commitsResponse.getHeaders().get("X-Next-Page").get(0).equals("")) {
             getCommitsForAllPages(lastUpdatedCommit, currentCommit, gitProjectId, instanceUrl, pageNum + 1, jsonArray);
-            ;
 
         }
         return paresAsArray(commitsResponse);
