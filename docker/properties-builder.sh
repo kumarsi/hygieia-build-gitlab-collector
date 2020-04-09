@@ -67,8 +67,8 @@ gitlab.projectIds=${GITLAB_PROJECT_IDS}
 # set username/apiKey to use HTTP Basic Auth (blank=no auth)
 # A comma seperated list of api token corresponding to the project id mentioned above
 gitlab.apiKeys=${GITLAB_API_TOKENS}
-gitlab.buildStages=${GITLAB_BUILD_STAGES:-build,test,analysis,docker,Build .jar and test,Build Docker image}
-gitlab.ignoredBuildStages =${GITLAB_IGNORED_BUILD_STAGES:-}
+gitlab.buildStages=${GITLAB_BUILD_STAGES:-build,test,analysis}
+gitlab.ignoredBuildStages=${GITLAB_IGNORED_BUILD_STAGES:-}
 gitlab.branchNames=${GITLAB_BRANCH_NAMES:-master}
 gitlab.firstRunHistoryDays=${GITLAB_COMMIT_THRESHOLD_DAYS:-30}
 
@@ -77,8 +77,8 @@ gitlab.firstRunHistoryDays=${GITLAB_COMMIT_THRESHOLD_DAYS:-30}
 gitlab.saveLog=true
 
 # Search criteria enabled via properties (max search criteria = 2)
-gitlab.searchFields[0]= options.jobName
-gitlab.searchFields[1]= niceName
+gitlab.searchFields[0]=options.jobName
+gitlab.searchFields[1]=niceName
 
 # Timeout values
 gitlab.connectTimeout=20000
