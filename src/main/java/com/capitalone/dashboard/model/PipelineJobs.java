@@ -50,7 +50,9 @@ public class PipelineJobs {
         return this.jobList.stream().filter(job -> buildStages
                 .contains(job.getStage().toLowerCase()))
                 .map(PipelineJob::getStartedAt)
-                .mapToLong(Long::longValue).min().orElse(0);
+                .mapToLong(Long::longValue)
+                .filter(x -> x != 0)
+                .min().orElse(0);
     }
 
     public long getLastEndTime(List<String> buildStages) {
