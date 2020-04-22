@@ -27,6 +27,15 @@ public class PipelineJobs {
         String commitId = (String) commit.get("id");
         List<String> parentCommitIds = new ArrayList<>();
         Iterator iterator = ((JSONArray) commit.get("parent_ids")).iterator();
+
+        //if pipeline jobs build phase doesn't have time, consume time from pipeline
+        JSONObject pipeline = (JSONObject) jsonObject.get("pipeline");
+        if (startedAt == 0 && pipeline.containsKey("created_at")) {
+            startedAt = getTime(pipeline, "created_at");
+        }
+        if (finishedAt == 0 && pipeline.containsKey("updated_at")) {
+            finishedAt = getTime(pipeline, "updated_at");
+        }
         while (iterator.hasNext()) {
             parentCommitIds.add((String) iterator.next());
         }
