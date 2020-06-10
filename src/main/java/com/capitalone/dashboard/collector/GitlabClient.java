@@ -15,8 +15,6 @@ import java.util.Set;
  */
 public interface GitlabClient {
 
-    void processPipelineCommits(List<PipelineCommit> commitsOfBuildStage, ObjectId collectorId, String gitProjectId, String instanceUrl);
-
     enum jobData {BUILD, CONFIG};
 
     /**
