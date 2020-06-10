@@ -2,6 +2,7 @@ package com.capitalone.dashboard.collector;
 
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import com.capitalone.dashboard.model.*;
 import org.apache.commons.lang3.StringUtils;
@@ -230,6 +231,7 @@ public class GitlabCollectorTask extends CollectorTask<GitlabCollector> {
                 Set<BaseModel> buildsSet = jobDataSetMap.get(GitlabClient.jobData.BUILD);
 
                 ArrayList<BaseModel> builds = Lists.newArrayList(nullSafe(buildsSet));
+                List<PipelineCommit> pipelineCommits = new ArrayList<>();
 
                 builds.sort(Comparator.comparingInt(b -> Integer.valueOf(((Build) b).getNumber())));
                 int counter = 1;
@@ -252,12 +254,19 @@ public class GitlabCollectorTask extends CollectorTask<GitlabCollector> {
                         if (build != null) {
                             build.setCollectorItemId(job.getId());
                             buildRepository.save(build);
+                            pipelineCommits.addAll(build.getSourceChangeSet()
+                                    .stream()
+                                    .map(scm -> new PipelineCommit(scm, build.getTimestamp()))
+                                    .collect(Collectors.toList()));
+
                             count++;
                         }
                     } else {
                         LOG.info(String.format("Skipping details for existing build %d of total %d builds", counter++, totalBuilds));
                     }
                 }
+                LOG.info("Processing pipeline commits...");
+                gitlabClient.processPipelineCommits(pipelineCommits, job.getCollectorId(), gitlabProjectId, job.getInstanceUrl());
             }
             log("New builds", start, count);
         }

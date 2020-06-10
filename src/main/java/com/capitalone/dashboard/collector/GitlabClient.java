@@ -3,8 +3,10 @@ package com.capitalone.dashboard.collector;
 import com.capitalone.dashboard.model.BaseModel;
 import com.capitalone.dashboard.model.Build;
 import com.capitalone.dashboard.model.GitlabProject;
+import com.capitalone.dashboard.model.PipelineCommit;
 import org.bson.types.ObjectId;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -12,6 +14,8 @@ import java.util.Set;
  * Client for fetching job and build information from Hudson
  */
 public interface GitlabClient {
+
+    void processPipelineCommits(List<PipelineCommit> commitsOfBuildStage, ObjectId collectorId, String gitProjectId, String instanceUrl);
 
     enum jobData {BUILD, CONFIG};
 

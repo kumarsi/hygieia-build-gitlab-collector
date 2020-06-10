@@ -4,6 +4,7 @@ import com.capitalone.dashboard.model.*;
 import com.capitalone.dashboard.repository.*;
 import com.capitalone.dashboard.util.Supplier;
 import com.fasterxml.jackson.databind.util.ISO8601DateFormat;
+import com.google.gson.Gson;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.bson.types.ObjectId;
@@ -260,18 +261,21 @@ public class DefaultGitlabClient implements GitlabClient {
                                 newCommit = getCommit(commitId, instanceUrl, gitProjectId);
 
                             }
-
-                            List<String> parentRevisionNumbers = newCommit != null ? newCommit.getScmParentRevisionNumbers() : null;
-                            /* Extract only merge comm  its */
-                            if (parentRevisionNumbers != null && !parentRevisionNumbers.isEmpty() && parentRevisionNumbers.size() > 1) {
+                            if (newCommit != null) {
                                 commits.add(newCommit);
                             }
+
+//                            List<String> parentRevisionNumbers = newCommit != null ? newCommit.getScmParentRevisionNumbers() : null;
+//                            /* Extract only merge comm  its */
+//                            if (parentRevisionNumbers != null && !parentRevisionNumbers.isEmpty() && parentRevisionNumbers.size() > 1) {
+//                                commits.add(newCommit);
+//                            }
 
 
                         });
                     }
                     build.setSourceChangeSet(Collections.unmodifiableList(commits));
-                    processPipelineCommits(Collections.unmodifiableList(commits), jobsForPipeline.getEarliestStartTime(settings.getBuildStages()), collectorId, gitProjectId, instanceUrl);
+//                    processPipelineCommits(Collections.unmodifiableList(commits), jobsForPipeline.getEarliestStartTime(settings.getBuildStages()), collectorId, gitProjectId, instanceUrl);
                     if(buildJson.containsKey("user") && buildJson.get("user") !=null){
                         build.setStartedBy(getString(((JSONObject) buildJson.get("user")), "name"));
                     }
@@ -331,14 +335,15 @@ public class DefaultGitlabClient implements GitlabClient {
         return pipeline;
     }
 
-    private void processPipelineCommits(List<Commit> commits, long timestamp, ObjectId collectorId, String gitProjectId, String instanceUrl) {
-        if (commits.size() <= 0) {
+    @Override
+    public void processPipelineCommits(List<PipelineCommit> commitsOfBuildStage, ObjectId collectorId, String gitProjectId, String instanceUrl) {
+        if (commitsOfBuildStage.size() <= 0) {
             return;
         }
         List<Dashboard> allDashboardsForCommit = findAllDashboardsForCollectorId(collectorId, gitProjectId);
         List<String> dashBoardIds = allDashboardsForCommit.stream().map(d -> d.getId().toString()).collect(Collectors.toList());
 
-        String environmentName = PipelineStage.BUILD.getName();
+        String buildEnvironment = PipelineStage.BUILD.getName();
         List<Collector> collectorList = collectorRepository.findByCollectorType(CollectorType.Product);
         List<CollectorItem> collectorItemList = collectorItemRepository.findByCollectorIdIn(collectorList.stream().map(BaseModel::getId).collect(Collectors.toList()));
 
@@ -348,30 +353,49 @@ public class DefaultGitlabClient implements GitlabClient {
             if (dashboardId) {
                 Pipeline pipeline = getOrCreatePipeline(collectorItem);
                 Map<String, EnvironmentStage> environmentStageMap = pipeline.getEnvironmentStageMap();
-                if (environmentStageMap.get(environmentName) == null) {
-                    environmentStageMap.put(environmentName, new EnvironmentStage());
+                EnvironmentStage commitStage = environmentStageMap.get(PipelineStage.COMMIT.getName());
+                if (commitStage == null || commitStage.getCommits() == null || commitStage.getCommits().isEmpty()) {
+                    LOG.error("Cannot populate pipeline commits for build since no pipeline commits for Commit stage found");
+                    LOG.error("Maybe the SCM collector has not been run?");
+                    return;
+                }
+                List<PipelineCommit> pipelineCommitsOfCommitsStage = new ArrayList<>(commitStage.getCommits());
+                pipelineCommitsOfCommitsStage.sort(Comparator.comparing(PipelineCommit::getScmCommitTimestamp).reversed());
+
+                if (environmentStageMap.get(buildEnvironment) == null) {
+                    environmentStageMap.put(buildEnvironment, new EnvironmentStage());
                 }
 
-                EnvironmentStage environmentStage = environmentStageMap.get(environmentName);
+                EnvironmentStage environmentStage = environmentStageMap.get(buildEnvironment);
                 if (environmentStage.getCommits() == null) {
                     environmentStage.setCommits(new HashSet<>());
                 }
 
-                Optional<PipelineCommit> lastUpdatedCommit = environmentStage.getCommits().stream().max(Comparator.comparing(PipelineCommit::getScmCommitTimestamp));
+                Set<PipelineCommit> buildStageCommits = new HashSet<>();
+                //Add all existing commits and incoming commits, removing duplicates
+                buildStageCommits.addAll(environmentStage.getCommits());
+                buildStageCommits.addAll(commitsOfBuildStage);
+                Map<String, PipelineCommit> builtCommitsBySha = buildStageCommits.stream()
+                        .collect(Collectors.toMap(x -> x.getScmRevisionNumber(), x -> x));
 
-                Optional<Commit> commitMax = commits.stream().max(Comparator.comparing(Commit::getScmCommitTimestamp));
-                HashSet<PipelineCommit> allPipelineCommits = new HashSet<PipelineCommit>();
-                if (lastUpdatedCommit.isPresent() && commitMax.isPresent()) {
-                    List<PipelineCommit> intermediateCommits = getIntermediateCommits(lastUpdatedCommit.get(), commitMax.get(), gitProjectId, instanceUrl, timestamp);
-                    allPipelineCommits.addAll(intermediateCommits);
+
+                List<PipelineCommit> finalSetOfBuiltCommits = new ArrayList<>();
+                long timestamp = 0;
+                for (PipelineCommit commit :
+                        pipelineCommitsOfCommitsStage) {
+                    if (builtCommitsBySha.containsKey(commit.getScmRevisionNumber())) {
+                        PipelineCommit builtPipelineCommit = builtCommitsBySha.get(commit.getScmRevisionNumber());
+                        finalSetOfBuiltCommits.add(builtPipelineCommit);
+                        timestamp = builtPipelineCommit.getTimestamp();
+                    } else {
+                        Gson gson = new Gson();
+                        PipelineCommit pipelineCommit = gson.fromJson(gson.toJson(commit), PipelineCommit.class);
+                        pipelineCommit.setTimestamp(timestamp);
+                        finalSetOfBuiltCommits.add(pipelineCommit);
+                    }
                 }
-                environmentStage.getCommits().addAll(commits.stream()
-                        .map(commit -> {
-                            //commit.setTimestamp(timestamp); <--- Not sure if we should do this.
-                            // IMO, the SCM timestamp should be unaltered.
-                            return new PipelineCommit(commit, timestamp);
-                        }).collect(Collectors.toSet()));
-                environmentStage.getCommits().addAll(allPipelineCommits);
+                finalSetOfBuiltCommits.sort(Comparator.comparing(PipelineCommit::getTimestamp).reversed());
+                environmentStage.setCommits(new LinkedHashSet<>(finalSetOfBuiltCommits));
                 pipelineRepository.save(pipeline);
             }
         }
@@ -383,11 +407,6 @@ public class DefaultGitlabClient implements GitlabClient {
         for (Object object : jsonArray) {
             JSONObject jsonObject = (JSONObject) object;
             JSONArray parentIdsArray = (JSONArray) jsonObject.get("parent_ids");
-            if (parentIdsArray.size() <= 1) {
-                // Donot process non-merge commits
-                continue;
-
-            }
             String commitId = (String) jsonObject.get("id");
             List<Commit> scmCommits = commitRepository.findByScmRevisionNumber(commitId);
             Commit commit;
@@ -423,7 +442,7 @@ public class DefaultGitlabClient implements GitlabClient {
 
 
     private JSONArray getCommitsForAllPages(PipelineCommit lastUpdatedCommit, Commit currentCommit, String gitProjectId, String instanceUrl, int pageNum, JSONArray jsonArray) {
-        String range = "&page=" + pageNum + "&since=" + new ISO8601DateFormat().format(lastUpdatedCommit.getScmCommitTimestamp())
+        String range = "&ref_name=master&page=" + pageNum + "&since=" + new ISO8601DateFormat().format(lastUpdatedCommit.getScmCommitTimestamp())
                  +"&until=" + new ISO8601DateFormat().format(currentCommit.getScmCommitTimestamp());
         String commitsUrl = gitProjectId + COMMITS_URL_WITH_SORT + range; //TODO: PAGINATION
         final String apiKey = settings.getProjectKey(gitProjectId);
