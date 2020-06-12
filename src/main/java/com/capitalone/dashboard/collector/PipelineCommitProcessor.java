@@ -107,6 +107,10 @@ public class PipelineCommitProcessor {
                     finalSetOfBuiltCommits.add(builtPipelineCommit);
                     timestamp = builtPipelineCommit.getTimestamp();
                 } else {
+                    if (timestamp == 0) {
+                        //Skip these commits because they may not have been built!
+                        continue;
+                    }
                     Gson gson = new Gson();
                     PipelineCommit pipelineCommit = gson.fromJson(gson.toJson(commit), PipelineCommit.class);
                     pipelineCommit.setTimestamp(timestamp);
