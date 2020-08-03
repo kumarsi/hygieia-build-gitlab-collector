@@ -1,19 +1,19 @@
 package com.capitalone.dashboard.model;
 
+import com.capitalone.dashboard.collector.*;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
+import org.slf4j.*;
 
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.List;
+import java.time.temporal.*;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class PipelineJobs {
-
+    private static final Logger LOG = LoggerFactory.getLogger(PipelineJobs.class);
     private List<PipelineJob> jobList = new ArrayList<>();
 
     public void addJob(JSONObject jsonObject) {
@@ -32,9 +32,11 @@ public class PipelineJobs {
         JSONObject pipeline = (JSONObject) jsonObject.get("pipeline");
         if (startedAt == 0 && pipeline.containsKey("created_at")) {
             startedAt = getTime(pipeline, "created_at");
+            LOG.info(String.format("Getting pipeline start time: %d", startedAt));
         }
         if (finishedAt == 0 && pipeline.containsKey("updated_at")) {
             finishedAt = getTime(pipeline, "updated_at");
+            LOG.info(String.format("Getting pipeline end time: %d", finishedAt));
         }
         while (iterator.hasNext()) {
             parentCommitIds.add((String) iterator.next());
@@ -90,13 +92,19 @@ public class PipelineJobs {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    private long getTime(JSONObject buildJson, String jsonField) {
+    private long getDateFromString(String dateString) {
+        if (dateString == null || dateString.isEmpty())
+            return 0L;
 
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ISO_DATE_TIME;
+        TemporalAccessor accessor = timeFormatter.parse(dateString);
+        return Instant.from(accessor).toEpochMilli();
+    }
+
+    private long getTime(JSONObject buildJson, String jsonField) {
         String dateToConsider = getString(buildJson, jsonField);
         if (dateToConsider != null) {
-            return Instant.from(DateTimeFormatter
-                    .ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSz")
-                    .parse(getString(buildJson, jsonField))).toEpochMilli();
+            return getDateFromString(dateToConsider);
         } else {
             return 0L;
         }

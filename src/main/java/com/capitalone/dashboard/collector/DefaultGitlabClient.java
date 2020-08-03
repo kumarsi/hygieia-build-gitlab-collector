@@ -164,7 +164,7 @@ public class DefaultGitlabClient implements GitlabClient {
     private Set<BaseModel> getPipelineDetailsForGitlabProjectPaginated(String projectApiUrl, int pageNum, String apiKey, String branchName) throws URISyntaxException, ParseException {
 
         String allPipelinesUrl = String.format("%s/%s", projectApiUrl, "pipelines");
-        LOG.info("Fetching pipelines for project {}, page {}", projectApiUrl, pageNum);
+        LOG.info("Fetching pipelines for project {}, page {}, Branch {}", allPipelinesUrl, pageNum, branchName);
         MultiValueMap<String, String> extraQueryParams = new LinkedMultiValueMap<>();
 
         extraQueryParams.put("ref", Collections.singletonList(branchName));
@@ -179,6 +179,7 @@ public class DefaultGitlabClient implements GitlabClient {
         JSONArray jsonPipelines = (JSONArray) parser.parse(returnJSON);
 
         if (jsonPipelines.isEmpty()) {
+            LOG.info(" pipelineNumber: empty--------");
             return Collections.emptySet();
         }
 
@@ -187,11 +188,11 @@ public class DefaultGitlabClient implements GitlabClient {
             JSONObject jsonPipeline = (JSONObject) pipeline;
             // A basic Build object. This will be fleshed out later if this is a new Build.
             String pipelineNumber = jsonPipeline.get("id").toString();
-            LOG.debug(" pipelineNumber: " + pipelineNumber);
+            LOG.info(" pipelineNumber: " + pipelineNumber);
             Build gitlabPipeline = new Build();
             gitlabPipeline.setNumber(pipelineNumber);
             String pipelineURL = String.format("%s/%s", allPipelinesUrl, pipelineNumber); //getString(jsonPipeline, "web_url");
-            LOG.debug(" Adding pipeline: " + pipelineURL);
+            LOG.info(" Adding pipeline: " + pipelineURL);
             gitlabPipeline.setBuildUrl(pipelineURL);
             pipelines.add(gitlabPipeline);
         }
