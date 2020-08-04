@@ -32,6 +32,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.stream.Collectors;
 
 
 /**
@@ -153,11 +154,18 @@ public class DefaultGitlabClient implements GitlabClient {
         gitlabProject.getOptions().put("projectId", projectId);
 
         final String apiKey = settings.getProjectKey(projectId);
-        final String branchName = settings.getBranchName(projectId);
-        Set<BaseModel> pipelines = getPipelineDetailsForGitlabProject(url, apiKey, branchName);
+        final String branchNames = settings.getBranchName(projectId);
 
-        jobDataMap.put(jobData.BUILD, pipelines);
 
+        Set<BaseModel> allPipelines = new HashSet<>();
+        for (String branch:
+                Arrays.asList(branchNames.split("\\|"))) {
+            Set<BaseModel> pipelines = getPipelineDetailsForGitlabProject(url, apiKey, branch);
+            LOG.info(String.format("Processing %d pipelines from branch %s", pipelines.size(), branch));
+            allPipelines.addAll(pipelines);
+        }
+        LOG.info(String.format("Accumulated %d pipelines from all branches", allPipelines.size()));
+        jobDataMap.put(jobData.BUILD, allPipelines);
         result.put(gitlabProject, jobDataMap);
     }
 
